@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Volleyball Stat Tracker — Rotation, Auto-Subs, Libero</title>
+<style>
+  :root{
+    --bg:#0e1220; --panel:#141a33; --panel2:#0f1530; --ink:#e9edff; --muted:#9aa4c9; --accent:#7aa2ff;
+    --good:#36d399; --bad:#ff6b6b; --warn:#ffb86b; --line:#2a3170; --shadow: 0 10px 30px rgba(0,0,0,.35);
+    --court:#174074; --lineCourt:#cfe6ff; --attack:#88b7ff66; --net:#ffffff;
+    --r:16px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial; color:var(--ink);
+       background: radial-gradient(1200px 600px at -10% -10%, #1a2252 0%, transparent 55%),
+                   radial-gradient(1200px 600px at 110% 10%, #18204b 0%, transparent 55%),
+                   linear-gradient(180deg,#0b0f23,#0a0d1d)}
+  .app{max-width:1280px;margin:0 auto;padding:20px}
+
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+  .brand{display:flex;align-items:center;gap:10px}
+  .logo{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#a9c2ff);display:grid;place-items:center;box-shadow:var(--shadow);color:#09132e;font-size:22px}
+  .title{font-weight:800}
+  .sub{color:var(--muted);font-size:14px}
+
+  .grid{display:grid;grid-template-columns: 500px 1fr; gap:14px}
+  @media (max-width: 1100px){ .grid{grid-template-columns:1fr} }
+
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel2)); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow)}
+  .card h3{margin:0 0 8px;padding:0 6px}
+
+  /* LEFT: Roster & Controls */
+  .left{padding:14px}
+  label{font-size:13px;color:var(--muted)}
+  input,select,button{font-size:15px}
+  input[type="text"], input[type="number"], select{
+    width:100%; background:#0e1440; color:#e9edff; border:1px solid #2a3270; border-radius:12px; padding:10px 12px; outline:none
+  }
+  #pName{ width:100%; min-width:420px }
+
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .btn{background:linear-gradient(180deg,#7aa2ff,#5a82ef); color:#07152f; border:none; padding:10px 14px; border-radius:12px; font-weight:800; cursor:pointer; box-shadow:0 8px 20px rgba(90,130,239,.35)}
+  .btn.ghost{background:transparent;color:#cbd5ff;border:1px solid #33407a;box-shadow:none}
+  .btn.warn{background:linear-gradient(180deg,#ffc36b,#ff9f3f);color:#211300}
+  .btn.bad{background:linear-gradient(180deg,#ff8787,#ff6b6b);color:#2b0c0c}
+  .btn.small{padding:6px 10px;font-size:13px;border-radius:10px}
+
+  .roster-list{margin-top:10px; max-height:260px; overflow:auto; padding-right:4px}
+  .player-chip{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border:1px solid #2a3170; border-radius:12px; margin-bottom:8px; background:#0e1540}
+  .chip-left{display:flex; align-items:center; gap:8px}
+  .num{width:28px;height:28px;border-radius:50%;background:#1a2258;display:grid;place-items:center;font-weight:800}
+  .pos{font-size:12px;color:#aeb7e8}
+  .chip-actions{display:flex; gap:6px}
+  .libero-tag{font-size:11px;color:#36d399;margin-left:6px}
+
+  /* RIGHT: Court & Stats */
+  .right{display:grid; grid-template-rows:auto auto 1fr; gap:14px}
+
+  /* Scoreboard */
+  .score{display:flex; gap:12px; align-items:center; padding:12px}
+  .score .box{flex:1; display:grid; grid-template-columns: 1fr auto auto; gap:8px; align-items:center; background:#0e1440; border:1px solid #2a3170; border-radius:12px; padding:8px 10px}
+  .score .box .name{font-weight:700}
+  .score .val{font-size:28px;font-weight:900;text-align:center}
+
+  /* Court */
+  .court-wrap{padding:12px}
+  .court{position:relative; height:480px; border-radius:16px; border:1px solid #2a3170; overflow:hidden; background:#174074}
+  /* Lines & 10ft (3m) attack lines */
+  .court::before{content:""; position:absolute; inset:0; background:
+    /* endlines */ linear-gradient(#cfe6ff,#cfe6ff) 0 4px/100% 4px no-repeat,
+    linear-gradient(#cfe6ff,#cfe6ff) 0 calc(100% - 4px)/100% 4px no-repeat,
+    /* sidelines */ linear-gradient(#cfe6ff,#cfe6ff) 4px 0/4px 100% no-repeat,
+    linear-gradient(#cfe6ff,#cfe6ff) calc(100% - 4px) 0/4px 100% no-repeat,
+    /* net/centerline */ linear-gradient(#ffffff,#ffffff) 0 50%/100% 3px no-repeat,
+    /* attack lines at ~3m from net each side */ repeating-linear-gradient(90deg, #88b7ff66 0 16px, transparent 16px 32px) 0 calc(50% - 96px)/100% 3px no-repeat,
+    repeating-linear-gradient(90deg, #88b7ff66 0 16px, transparent 16px 32px) 0 calc(50% + 96px)/100% 3px no-repeat;
+  }
+
+  .slot-label{position:absolute; font-size:12px; color:#b7c0ef; opacity:.85}
+
+  /* On-court slots */
+  .slot{position:absolute; width:70px; height:70px; transform: translate(-50%, -50%);} 
+  .badge{position:absolute; inset:0; border-radius:18px; background:#0c1242; border:1px solid #34408a; display:grid; place-items:center; cursor:pointer; transition: transform .15s ease}
+  .badge:hover{transform: scale(1.03)}
+  .badge.selected{outline:3px solid var(--accent);} 
+  .badge .num{width:auto;height:auto;border-radius:12px;background:#1b2662;padding:4px 8px}
+  .name-small{position:absolute; bottom:-18px; left:50%; transform:translateX(-50%); font-size:12px; color:#c7cff8}
+  .pos-badge{ position:absolute; top:-10px; left:-10px; width:22px; height:22px; border-radius:50%; background:#1b2662; border:1px solid #34408a; display:grid; place-items:center; font-size:11px; color:#c7cff8 }
+  .server-ring{position:absolute; inset:-6px; border-radius:22px; border: 3px solid var(--accent); pointer-events:none}
+
+  /* Panels */
+  .panel{padding:12px}
+  .section-title{font-size:13px; color:#9aa4c9; margin-bottom:6px}
+
+  .stats-grid{display:grid; grid-template-columns: repeat(8, 1fr); gap:8px}
+  @media (max-width:1100px){ .stats-grid{grid-template-columns: repeat(4, 1fr)} }
+  @media (max-width:700px){ .stats-grid{grid-template-columns: repeat(2, 1fr)} }
+  .stat-btn{background:#0e1440; border:1px solid #2a3170; border-radius:12px; padding:10px; display:grid; place-items:center; cursor:pointer}
+  .stat-btn strong{font-size:12px}
+  .stat-btn small{font-size:11px; color:#9aa4c9}
+  .stat-btn:active{transform: translateY(1px)}
+
+  .rule{display:flex; gap:8px; align-items:center; margin-bottom:8px}
+  .rule small{color:#9aa4c9}
+
+  .spacer{height:10px}
+  .help{color:#aab3e8; font-size:13px}
+  .tiny{font-size:12px; color:#9aa7e8}
+
+  .debug{position:fixed; right:10px; bottom:10px; background:#0e1440; border:1px solid #2a3170; padding:6px 10px; border-radius:10px; font-size:12px; color:#9aa4c9; display:none; max-width:60ch}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="logo">🏐</div>
+      <div>
+        <div class="title">Volleyball Stat Tracker</div>
+        <div class="sub">True clockwise rotation, multi-rule auto-subs, Libero logic, and a proper court with 10ft lines.</div>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn small" id="newTeam">New Team</button>
+      <select id="teamSelect"></select>
+      <button class="btn small" id="saveTeam">Save Team</button>
+      <button class="btn small warn" id="startSet">Start Set (libero off)</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT -->
+    <section class="card left">
+      <h3>Roster</h3>
+      <div class="row">
+        <div style="flex:1 1 auto">
+          <label>Player name</label>
+          <input type="text" id="pName" placeholder="e.g., Ava Smith"/>
+        </div>
+        <div style="width:110px">
+          <label>#</label>
+          <input type="number" id="pNum" placeholder="12"/>
+        </div>
+        <div style="width:160px">
+          <label>Position</label>
+          <select id="pPos">
+            <option value="OH">OH</option>
+            <option value="MB">MB</option>
+            <option value="OPP">OPP</option>
+            <option value="S">S</option>
+            <option value="DS">DS</option>
+            <option value="L">L (Libero)</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" id="addPlayer">Add Player</button>
+        <button class="btn ghost" id="clearRoster">Clear Roster</button>
+      </div>
+      <div class="spacer"></div>
+      <div class="section-title">Drag a player onto a court slot to set the starting lineup (no Libero in starting 6)</div>
+      <div class="roster-list" id="roster"></div>
+
+      <div class="spacer"></div>
+      <h3>Libero</h3>
+      <div class="row">
+        <div style="flex:1 1 45%">
+          <label>Libero player</label>
+          <select id="liberoSelect"></select>
+        </div>
+        <div style="flex:1 1 45%">
+          <label>Replaces (paired with)</label>
+          <select id="liberoPairSelect"></select>
+        </div>
+      </div>
+      <div class="tiny">Libero enters automatically only in <b>back row</b> (positions 1,5,6). When that slot rotates to the <b>front row</b> (2,3,4), the original paired player returns. Libero cannot be in the starting lineup.</div>
+
+      <div class="spacer"></div>
+      <h3>Auto-Sub Rules</h3>
+      <div class="tiny">Create multiple rules per slot. Example: when a player rotates into <b>slot 6</b>, sub <i>John In</i> for <i>Jane Out</i>. Rules apply on every rotation.</div>
+      <div id="rulesPanel" class="panel"></div>
+    </section>
+
+    <!-- RIGHT -->
+    <section class="right">
+      <!-- SCOREBOARD -->
+      <div class="card score">
+        <div class="box">
+          <div class="name">Us</div>
+          <div class="val" id="ourScore">0</div>
+          <div class="row">
+            <button class="btn small" id="usPlus">+1</button>
+            <button class="btn small ghost" id="usMinus">−1</button>
+          </div>
+        </div>
+        <div class="box">
+          <div class="name">Them</div>
+          <div class="val" id="theirScore">0</div>
+          <div class="row">
+            <button class="btn small" id="themPlus">+1</button>
+            <button class="btn small ghost" id="themMinus">−1</button>
+          </div>
+        </div>
+        <div class="row" style="margin-left:auto">
+          <label>Serving</label>
+          <select id="serving">
+            <option value="us">Us</option>
+            <option value="them">Them</option>
+          </select>
+          <button class="btn small" id="wonRally">We won rally</button>
+          <button class="btn small ghost" id="lostRally">We lost rally</button>
+          <button class="btn small warn" id="rotateBtn">Rotate ⟳</button>
+          <button class="btn small ghost" id="layoutBtn">Layout mode</button>
+          <button class="btn small ghost" id="resetLayout">Reset layout</button>
+        </div>
+      </div>
+
+      <!-- COURT -->
+      <div class="card court-wrap">
+        <div class="court" id="court">
+          <div class="slot-label" style="left:10px; top:10px">Front row ↑</div>
+          <div class="slot-label" style="right:10px; bottom:10px">Back row ↓</div>
+
+          <!-- Slots 1..6 (1 = RB/server back-right; 6 = MB) -->
+          <div class="slot" data-pos="1" style="left: 78%; top: 78%"></div>
+          <div class="slot" data-pos="2" style="left: 78%; top: 22%"></div>
+          <div class="slot" data-pos="3" style="left: 50%; top: 18%"></div>
+          <div class="slot" data-pos="4" style="left: 22%; top: 22%"></div>
+          <div class="slot" data-pos="5" style="left: 22%; top: 78%"></div>
+          <div class="slot" data-pos="6" style="left: 50%; top: 82%"></div>
+        </div>
+      </div>
+
+      <!-- STATS -->
+      <div class="card panel">
+        <div class="row">
+          <div class="section-title">Selected player</div>
+          <div id="selectedInfo" class="help">Tap a player badge on the court or a name in the roster.</div>
+          <button class="btn small ghost" id="undoBtn" style="margin-left:auto">Undo last stat</button>
+        </div>
+        <div class="stats-grid">
+          <button class="stat-btn" data-stat="kills"><strong>Kill</strong><small>+1</small></button>
+          <button class="stat-btn" data-stat="aces"><strong>Ace</strong><small>+1</small></button>
+          <button class="stat-btn" data-stat="errors"><strong>Error</strong><small>+1</small></button>
+          <button class="stat-btn" data-stat="serves"><strong>Serve</strong><small>+1</small></button>
+          <button class="stat-btn" data-stat="serviceErrors"><strong>Service Err</strong><small>+1</small></button>
+          <button class="stat-btn" data-stat="digs"><strong>Dig</strong><small>+1</small></button>
+          <button class="stat-btn" data-stat="assists"><strong>Assist</strong><small>+1</small></button>
+          <button class="stat-btn" data-stat="blocks"><strong>Block</strong><small>+1</small></button>
+        </div>
+        <div class="spacer"></div>
+        <div class="row">
+          <div class="section-title">Player stats</div>
+          <div id="statLine" class="help"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+<div id="debug" class="debug"></div>
+
+<script>
+// Event-delegated, rotation-true tracker with multi-rule autosubs and Libero logic.
+(function(){
+  const $ = (s, d=document)=> d.querySelector(s);
+  const $$ = (s, d=document)=> Array.from(d.querySelectorAll(s));
+  const defaultStats = ()=>({ kills:0, aces:0, errors:0, serves:0, serviceErrors:0, digs:0, assists:0, blocks:0 });
+  const uid = ()=> 'p'+Math.random().toString(36).slice(2,9);
+  const dbg = (m)=>{ const el=$('#debug'); el.style.display='block'; el.textContent=m; };
+  const clearDbg = ()=>{ const el=$('#debug'); el.style.display='none'; el.textContent=''; };
+  window.onerror = (msg)=>{ dbg(String(msg)); };
+
+  // ---------- State ----------
+  let teams = loadTeams();
+  let team = ensureTeam(teams[ Object.keys(teams)[0] ] || { name: 'My Team', roster: [], autosubRules: {}, libero:null, liberoPair:null, layout:{} });
+  let court = Array(6).fill(null); // slot index 0..5 => positions 1..6
+  let selectedId = null;
+  let historyStack = [];
+  let serving = 'us';
+  let score = { us:0, them:0 };
+  let layoutMode = false;
+  let setStarted = false; // enforces libero not in starting 6
+
+  // ---------- Storage ----------
+  function loadTeams(){ try{ return JSON.parse(localStorage.getItem('vb_teams_v2')||'{}'); }catch{ return {} } }
+  function saveTeams(){ localStorage.setItem('vb_teams_v2', JSON.stringify(teams)); }
+  function persist(){ teams[team.name] = team; saveTeams(); renderTeamSelect(); }
+
+  function ensureTeam(t){
+    t = t || {}; t.name = t.name || 'My Team';
+    t.roster = Array.isArray(t.roster)? t.roster : [];
+    t.autosubRules = t.autosubRules || {}; // { posNumber: [ {outId, inId} ] }
+    for(let i=1;i<=6;i++){ if(!Array.isArray(t.autosubRules[i])) t.autosubRules[i]=[]; }
+    t.layout = t.layout || {};
+    t.libero = t.libero || null; // playerId
+    t.liberoPair = t.liberoPair || null; // playerId they replace
+    t.roster.forEach(p=> p.stats = Object.assign(defaultStats(), p.stats||{}));
+    return t;
+  }
+
+  // ---------- Rendering ----------
+  function renderTeamSelect(){
+    const sel = $('#teamSelect'); sel.innerHTML = '';
+    const names = Object.keys(teams); if(!names.includes(team.name)) names.unshift(team.name);
+    names.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; if(n===team.name) o.selected=true; sel.appendChild(o); });
+  }
+
+  function rosterOptionsHtml(filterLibero){
+    return team.roster.filter(p=> !filterLibero || p.position==='L').map(p=>`<option value="${p.id}">${p.number||''} ${p.name}</option>`).join('');
+  }
+  function rosterOptionsNonLiberoHtml(){
+    return team.roster.filter(p=> p.position!=='L').map(p=>`<option value="${p.id}">${p.number||''} ${p.name}</option>`).join('');
+  }
+
+  function renderRoster(){
+    const wrap = $('#roster'); wrap.innerHTML = '';
+    team.roster.forEach(p=>{
+      const row = document.createElement('div'); row.className='player-chip'; row.dataset.id=p.id; row.draggable=true;
+      row.innerHTML = `
+        <div class="chip-left">
+          <div class="num">${p.number||'?'}</div>
+          <div>
+            <div style="font-weight:700">${p.name||'Unnamed'}${p.position==='L'?'<span class=libero-tag> • Libero</span>':''}</div>
+            <div class="pos">${p.position||''}</div>
+          </div>
+        </div>
+        <div class="chip-actions">
+          <button class="btn small ghost" data-act="sel">Select</button>
+          <button class="btn small bad" data-act="del">Delete</button>
+        </div>`;
+      row.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', p.id); });
+      wrap.appendChild(row);
+    });
+  }
+
+  function renderLiberoControls(){
+    const libSel = $('#liberoSelect');
+    libSel.innerHTML = `<option value="">(no libero)</option>` + rosterOptionsHtml(true);
+    libSel.value = team.libero || '';
+
+    const pairSel = $('#liberoPairSelect');
+    pairSel.innerHTML = `<option value="">(paired original player)</option>` + rosterOptionsNonLiberoHtml();
+    pairSel.value = team.liberoPair || '';
+  }
+
+  function renderRules(){
+    const wrap = $('#rulesPanel'); wrap.innerHTML='';
+    for(let pos=1; pos<=6; pos++){
+      const section = document.createElement('div'); section.className='card panel';
+      const header = document.createElement('div'); header.className='row'; header.innerHTML = `<strong>Slot ${pos}</strong><span class="tiny">(add multiple sub rules)</span>`;
+      section.appendChild(header);
+
+      const ruleList = document.createElement('div');
+      (team.autosubRules[pos]||[]).forEach((r, idx)=>{
+        const row = document.createElement('div'); row.className='rule';
+        const outName = nameOf(r.outId), inName = nameOf(r.inId);
+        row.innerHTML = `<small>When <b>${outName}</b> enters slot ${pos}, sub in <b>${inName}</b></small> <button class="btn small ghost" data-rule-del="${pos}:${idx}">Remove</button>`;
+        ruleList.appendChild(row);
+      });
+
+      const addRow = document.createElement('div'); addRow.className='rule';
+      addRow.innerHTML = `
+        <small>New rule:</small>
+        <select data-rule-out><option value="">(out player)</option>${rosterOptionsNonLiberoHtml()}</select>
+        <span>→</span>
+        <select data-rule-in><option value="">(in player)</option>${rosterOptionsNonLiberoHtml()}</select>
+        <button class="btn small" data-rule-add="${pos}">Add</button>
+      `;
+      section.appendChild(ruleList); section.appendChild(addRow);
+      wrap.appendChild(section);
+    }
+  }
+
+  function nameOf(id){ const p=team.roster.find(x=>x.id===id); return p?`#${p.number||''} ${p.name}`:'(unknown)'; }
+
+  function renderCourt(){
+    const courtEl = $('#court');
+    ['.badge','.name-small','.server-ring','.pos-badge'].forEach(sel => $$(sel, courtEl).forEach(n=>n.remove()));
+    const slots = $$('.slot', courtEl);
+
+    // apply saved layout
+    slots.forEach(slot=>{ const pos=+slot.dataset.pos; const lay=team.layout[pos]; if(lay){ slot.style.left=lay.x; slot.style.top=lay.y; } });
+
+    slots.forEach(slot=>{
+      const pos = +slot.dataset.pos; const idx = pos-1; const pid = court[idx];
+      // droppable
+      slot.addEventListener('dragover', e=> e.preventDefault());
+      slot.addEventListener('drop', e=>{ e.preventDefault(); const id=e.dataTransfer.getData('text/plain'); if(id) onDrop(idx, id); });
+      // badge
+      const badge = document.createElement('div'); badge.className='badge';
+      const label = document.createElement('div'); label.className='name-small';
+      if(pid){
+        const p = team.roster.find(x=>x.id===pid);
+        badge.innerHTML = `<div class="num">${p?.number||'?'}</div>`; label.textContent = p?.name||'';
+        if(pid===selectedId) badge.classList.add('selected');
+        badge.draggable = true; badge.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', pid); });
+      }else{
+        badge.innerHTML = `<div class="num" style="opacity:.5">—</div>`; label.textContent='Empty'; label.style.opacity=.5;
+      }
+      badge.addEventListener('click', ()=>{ if(pid) selectPlayer(pid); });
+      slot.appendChild(badge); slot.appendChild(label);
+      const posBadge = document.createElement('div'); posBadge.className='pos-badge'; posBadge.textContent=String(pos); slot.appendChild(posBadge);
+      if(pos===1){ const ring=document.createElement('div'); ring.className='server-ring'; slot.appendChild(ring); }
+
+      // layout drag
+      if(layoutMode){
+        slot.style.cursor='move';
+        slot.onpointerdown = (e)=>{
+          e.preventDefault(); const courtRect=courtEl.getBoundingClientRect(); const sRect=slot.getBoundingClientRect(); const offX=e.clientX-sRect.left, offY=e.clientY-sRect.top;
+          function onMove(ev){ let x=((ev.clientX-courtRect.left-offX+35)/courtRect.width)*100; let y=((ev.clientY-courtRect.top-offY+35)/courtRect.height)*100; x=Math.max(8,Math.min(92,x)); y=Math.max(8,Math.min(92,y)); slot.style.left=x+'%'; slot.style.top=y+'%'; }
+          function onUp(){ window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp, true); team.layout[pos]={x:slot.style.left,y:slot.style.top}; persist(); }
+          window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp, true);
+        };
+      } else { slot.style.cursor='default'; slot.onpointerdown=null; }
+    });
+  }
+
+  function renderSelected(){
+    const p = team.roster.find(x=>x.id===selectedId); const label=$('#selectedInfo'); const line=$('#statLine');
+    if(!p){ label.textContent='Tap a player badge on the court or a name in the roster.'; line.textContent=''; return; }
+    label.innerHTML = `<strong>#${p.number}</strong> ${p.name} — <span class="tiny">${p.position||''}</span>`;
+    const s=p.stats; line.textContent=`Kills ${s.kills} | Aces ${s.aces} | Errors ${s.errors} | Serves ${s.serves} | S.Err ${s.serviceErrors} | Digs ${s.digs} | Assists ${s.assists} | Blocks ${s.blocks}`;
+  }
+
+  function renderScore(){ $('#ourScore').textContent=score.us; $('#theirScore').textContent=score.them; $('#serving').value=serving; }
+
+  function renderAll(){ renderTeamSelect(); renderRoster(); renderLiberoControls(); renderRules(); renderCourt(); renderSelected(); renderScore(); }
+
+  // ---------- Lineup helpers ----------
+  function onDrop(idx, id){
+    const player = team.roster.find(p=>p.id===id);
+    if(!setStarted && player?.position==='L'){ alert('Libero cannot be in the starting lineup. Place the original player first, then press "Start Set".'); return; }
+    const existingIdx = court.indexOf(id);
+    if(existingIdx===idx) return;
+    if(existingIdx!==-1){ const displaced=court[idx]; court[idx]=id; court[existingIdx]=displaced||null; }
+    else { court[idx]=id; }
+    enforceUnique(); renderCourt();
+  }
+
+  function rotateClockwise(){
+    // True clockwise rotation for the on-screen layout: 5→4→3→2→1→6 (and 6→5).
+    // Implemented as a LEFT rotation of the array by 1: [c2,c3,c4,c5,c6,c1]
+    court = [court[1], court[2], court[3], court[4], court[5], court[0]];
+    applyAutosubs(); applyLibero(); enforceUnique(); renderCourt();
+  }
+
+  function applyAutosubs(){
+    // After every rotation, for each position apply rules in order
+    for(let pos=1; pos<=6; pos++){
+      const idx = pos-1; const rules = team.autosubRules[pos]||[]; if(!rules.length) continue;
+      const currentId = court[idx];
+      for(const r of rules){
+        if(currentId===r.outId){
+          if(!court.includes(r.inId)){ court[idx] = r.inId; } // bench the out, insert the in
+          break; // only first matching rule
+        }
+      }
+    }
+  }
+
+  function applyLibero(){
+    const libero = team.roster.find(p=>p.id===team.libero);
+    const pair = team.roster.find(p=>p.id===team.liberoPair);
+    if(!libero || !pair) return;
+
+    // Back row indices for positions [1,5,6] => [0,4,5]
+    const isBack = [true,false,false,false,true,true];
+    for(let i=0;i<6;i++){
+      const pid = court[i];
+      const isFront = !isBack[i];
+      if(isFront && pid===libero.id){
+        if(!court.includes(pair.id)) court[i]=pair.id; else court[i]=null;
+        continue;
+      }
+      if(isBack[i] && pid===pair.id){
+        const existingL = court.indexOf(libero.id); if(existingL!==-1) court[existingL]= (existingL===i? court[existingL]: null);
+        court[i]=libero.id;
+      }
+    }
+  }
+
+  function enforceUnique(){ const seen=new Set(); for(let i=0;i<6;i++){ const id=court[i]; if(!id) continue; if(seen.has(id)) court[i]=null; else seen.add(id); } }
+
+  function selectPlayer(id){ selectedId=id; renderSelected(); renderCourt(); }
+
+  function addStat(stat){ const p=team.roster.find(x=>x.id===selectedId); if(!p){ alert('Select a player first.'); return; } p.stats[stat]=(p.stats[stat]||0)+1; historyStack.push({playerId:p.id,stat}); renderSelected(); }
+  function undo(){ const last=historyStack.pop(); if(!last) return; const p=team.roster.find(x=>x.id===last.playerId); if(p && p.stats[last.stat]>0) p.stats[last.stat]--; renderSelected(); }
+
+  // ---------- Delegated Events ----------
+  document.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button');
+
+    if(btn){
+      switch(btn.id){
+        case 'addPlayer':{
+          const name=$('#pName').value.trim(); const num=$('#pNum').value.trim(); const pos=$('#pPos').value; if(!name) return;
+          const p={id:uid(), name, number:Number(num)||'', position:pos, stats:defaultStats()}; team.roster.push(p);
+          $('#pName').value=''; $('#pNum').value=''; renderRoster(); renderLiberoControls(); renderRules(); persist(); return; }
+        case 'clearRoster':{
+          if(confirm('Clear the roster?')){ team.roster=[]; court=Array(6).fill(null); renderAll(); persist(); } return; }
+        case 'newTeam':{
+          const name=prompt('Team name?'); if(!name) return; team=ensureTeam({ name, roster:[], autosubRules:{}, libero:null, liberoPair:null, layout:{} }); teams[name]=team; court=Array(6).fill(null); renderAll(); persist(); setStarted=false; return; }
+        case 'saveTeam': persist(); alert('Team saved.'); return;
+        case 'startSet':{
+          setStarted=true;
+          if(team.libero){ const li=team.roster.find(p=>p.id===team.libero); const pair=team.roster.find(p=>p.id===team.liberoPair); if(li && pair){ const idx=court.indexOf(li.id); if(idx!==-1){ if(!court.includes(pair.id)) court[idx]=pair.id; else court[idx]=null; } } }
+          renderCourt(); return; }
+        case 'usPlus': score.us++; renderScore(); return;
+        case 'usMinus': score.us=Math.max(0, score.us-1); renderScore(); return;
+        case 'themPlus': score.them++; renderScore(); return;
+        case 'themMinus': score.them=Math.max(0, score.them-1); renderScore(); return;
+        case 'wonRally':{
+          if(serving==='them'){ rotateClockwise(); serving='us'; score.us++; }
+          else { score.us++; }
+          if(!setStarted) setStarted=true; renderScore(); return; }
+        case 'lostRally':{
+          if(serving==='us'){ serving='them'; score.them++; }
+          else { score.them++; }
+          if(!setStarted) setStarted=true; renderScore(); return; }
+        case 'rotateBtn': rotateClockwise(); return;
+        case 'layoutBtn': layoutMode=!layoutMode; btn.classList.toggle('warn', layoutMode); renderCourt(); return;
+        case 'resetLayout': team.layout={}; persist(); renderCourt(); return;
+        case 'undoBtn': undo(); return;
+      }
+
+      if(btn.dataset.ruleAdd){
+        const pos = +btn.dataset.ruleAdd; const row=btn.closest('.rule'); if(!row) return;
+        const outId=row.querySelector('[data-rule-out]')?.value; const inId=row.querySelector('[data-rule-in]')?.value;
+        if(!outId || !inId || outId===inId){ alert('Pick two different players for OUT and IN.'); return; }
+        team.autosubRules[pos].push({outId,inId}); renderRules(); persist(); return;
+      }
+      if(btn.dataset.ruleDel){ const [pos,idx]=btn.dataset.ruleDel.split(':').map(Number); team.autosubRules[pos].splice(idx,1); renderRules(); persist(); return; }
+    }
+
+    const chip = e.target.closest('.player-chip');
+    if(chip){ const pid = chip.dataset.id; selectPlayer(pid); return; }
+
+    const statBtn = e.target.closest('.stat-btn'); if(statBtn){ addStat(statBtn.dataset.stat); return; }
+  });
+
+  document.addEventListener('change', (e)=>{
+    const t=e.target;
+    if(t.id==='serving'){ serving=t.value; return; }
+    if(t.id==='teamSelect'){ const name=t.value; team = ensureTeam( teams[name] || { name, roster:[], autosubRules:{}, libero:null, liberoPair:null, layout:{} } ); court=Array(6).fill(null); renderAll(); setStarted=false; return; }
+    if(t.id==='liberoSelect'){ team.libero = t.value || null; persist(); return; }
+    if(t.id==='liberoPairSelect'){ team.liberoPair = t.value || null; persist(); return; }
+  });
+
+  $('#roster').addEventListener('click', (e)=>{ const row=e.target.closest('.player-chip'); if(!row) return; selectPlayer(row.dataset.id); });
+
+  renderAll(); clearDbg();
+})();
+</script>
+</body>
+</html>
